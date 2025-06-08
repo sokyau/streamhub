@@ -5,9 +5,16 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
+const StreamScheduler = require('./scheduler'); // Nueva importación
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
+// Configuración WebSocket para notificaciones en tiempo real
+const http = require('http');
+const WebSocket = require('ws');
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
 const storage = multer.diskStorage({
     destination: async (req, file, cb) => {
@@ -31,7 +38,39 @@ app.use(express.static('public'));
 
 const db = new sqlite3.Database('db/streamhub.db');
 
+// Inicializar el scheduler
+const scheduler = new StreamScheduler(db);
+
+// WebSocket broadcast
+function broadcast(type, data) {
+    const message = JSON.stringify({ type, data });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+}
+
+// Configurar eventos del scheduler para notificaciones
+scheduler.on('stream:scheduled:started', (data) => {
+    broadcast('scheduled_stream_started', data);
+});
+
+scheduler.on('stream:scheduled:error', (data) => {
+    broadcast('scheduled_stream_error', data);
+});
+
+scheduler.on('stream:conflict:resolved', (data) => {
+    broadcast('stream_conflict_resolved', data);
+});
+
+scheduler.on('stream:scheduled:ended', (data) => {
+    broadcast('scheduled_stream_ended', data);
+});
+
+// Inicializar base de datos y scheduler
 db.serialize(() => {
+    // Tablas existentes
     db.run(`CREATE TABLE IF NOT EXISTS videos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT NOT NULL,
@@ -62,9 +101,18 @@ db.serialize(() => {
         FOREIGN KEY (video_id) REFERENCES videos(id),
         FOREIGN KEY (platform_id) REFERENCES platforms(id)
     )`);
+    
+    // Inicializar scheduler después de crear tablas
+    scheduler.initialize().then(() => {
+        console.log('Scheduler inicializado correctamente');
+    }).catch(err => {
+        console.error('Error al inicializar scheduler:', err);
+    });
 });
 
 const activeStreams = new Map();
+
+// ========== ENDPOINTS EXISTENTES ==========
 
 app.post('/api/upload', upload.single('video'), async (req, res) => {
     try {
@@ -249,6 +297,13 @@ app.post('/api/stream/start', async (req, res) => {
                 platformId
             });
             
+            // Actualizar scheduler activeStreams
+            scheduler.activeStreams.set(streamKey, {
+                process: ffmpeg,
+                videoId,
+                platformId
+            });
+            
             db.run(
                 'INSERT INTO streams (video_id, platform_id, status, process_pid, started_at) VALUES (?, ?, ?, ?, datetime("now"))',
                 [videoId, platformId, 'streaming', ffmpeg.pid]
@@ -260,6 +315,7 @@ app.post('/api/stream/start', async (req, res) => {
             
             ffmpeg.on('close', (code) => {
                 activeStreams.delete(streamKey);
+                scheduler.activeStreams.delete(streamKey);
                 db.run(
                     'UPDATE streams SET status = ?, error_message = ? WHERE video_id = ? AND platform_id = ? AND status = "streaming"',
                     [code === 0 ? 'completed' : 'error', code !== 0 ? `Exit code: ${code}` : null, videoId, platformId]
@@ -287,6 +343,7 @@ app.post('/api/stream/stop', (req, res) => {
     if (stream) {
         stream.process.kill('SIGTERM');
         activeStreams.delete(streamKey);
+        scheduler.activeStreams.delete(streamKey);
         
         db.run(
             'UPDATE streams SET status = "stopped" WHERE video_id = ? AND platform_id = ? AND status = "streaming"',
@@ -331,11 +388,117 @@ app.get('/api/streams/history', (req, res) => {
     });
 });
 
+// ========== NUEVOS ENDPOINTS PARA PROGRAMACIÓN ==========
+
+// Obtener todas las programaciones
+app.get('/api/scheduled-streams', async (req, res) => {
+    try {
+        const schedules = await scheduler.getAllSchedules();
+        
+        // Enriquecer con información de plataformas
+        const enrichedSchedules = await Promise.all(schedules.map(async (schedule) => {
+            const platformIds = JSON.parse(schedule.platform_ids);
+            const platforms = await scheduler.getPlatforms(platformIds);
+            
+            return {
+                ...schedule,
+                platform_ids: platformIds,
+                schedule_days: JSON.parse(schedule.schedule_days),
+                platforms: platforms.map(p => ({ id: p.id, name: p.name, type: p.type }))
+            };
+        }));
+        
+        res.json(enrichedSchedules);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Crear nueva programación
+app.post('/api/scheduled-streams', async (req, res) => {
+    try {
+        const { videoId, platformIds, scheduleDays, scheduleTime } = req.body;
+        
+        // Validaciones
+        if (!videoId || !platformIds || !scheduleDays || !scheduleTime) {
+            return res.status(400).json({ error: 'Faltan campos requeridos' });
+        }
+        
+        if (!Array.isArray(platformIds) || platformIds.length === 0) {
+            return res.status(400).json({ error: 'Debe seleccionar al menos una plataforma' });
+        }
+        
+        if (!Array.isArray(scheduleDays) || scheduleDays.length === 0) {
+            return res.status(400).json({ error: 'Debe seleccionar al menos un día' });
+        }
+        
+        // Validar formato de hora HH:MM
+        const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (!timeRegex.test(scheduleTime)) {
+            return res.status(400).json({ error: 'Formato de hora inválido (use HH:MM)' });
+        }
+        
+        const result = await scheduler.createSchedule({
+            videoId,
+            platformIds,
+            scheduleDays,
+            scheduleTime
+        });
+        
+        res.json({ success: true, scheduleId: result.id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Actualizar programación
+app.put('/api/scheduled-streams/:id', async (req, res) => {
+    try {
+        const scheduleId = parseInt(req.params.id);
+        const { platformIds, scheduleDays, scheduleTime, isActive } = req.body;
+        
+        await scheduler.updateSchedule(scheduleId, {
+            platformIds,
+            scheduleDays,
+            scheduleTime,
+            isActive
+        });
+        
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Eliminar programación
+app.delete('/api/scheduled-streams/:id', async (req, res) => {
+    try {
+        const scheduleId = parseInt(req.params.id);
+        await scheduler.deleteSchedule(scheduleId);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Obtener logs de una programación
+app.get('/api/scheduled-streams/:id/logs', async (req, res) => {
+    try {
+        const scheduleId = parseInt(req.params.id);
+        const logs = await scheduler.getScheduleLogs(scheduleId);
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Funciones auxiliares existentes
 function stopAllStreamsForVideo(videoId) {
     activeStreams.forEach((stream, key) => {
         if (stream.videoId == videoId) {
             stream.process.kill('SIGTERM');
             activeStreams.delete(key);
+            scheduler.activeStreams.delete(key);
         }
     });
 }
@@ -345,10 +508,13 @@ function stopAllStreamsForPlatform(platformId) {
         if (stream.platformId == platformId) {
             stream.process.kill('SIGTERM');
             activeStreams.delete(key);
+            scheduler.activeStreams.delete(key);
         }
     });
 }
 
-app.listen(PORT, '0.0.0.0', () => {
+// Usar server en lugar de app.listen para WebSocket
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`StreamHub ejecutándose en http://localhost:${PORT}`);
+    console.log('WebSocket disponible para notificaciones en tiempo real');
 });
