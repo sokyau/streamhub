@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamHub - Centro de Transmisión</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                    <path d="M10 9L15 12L10 15V9Z" fill="currentColor"/>
+                </svg>
+                <h1>StreamHub</h1>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showUploadModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5V19M5 12L12 5L19 12" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    Subir Video
+                </button>
+                <button class="btn btn-secondary" onclick="showPlatformModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 4V20M4 12H20" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    Agregar Plataforma
+                </button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <section class="videos-section">
+                <h2>Mis Videos</h2>
+                <div id="videosList" class="videos-grid">
+                </div>
+            </section>
+
+            <section class="streams-section">
+                <h2>Transmisiones Activas</h2>
+                <div id="activeStreams" class="streams-list">
+                </div>
+            </section>
+        </main>
+
+        <div id="uploadModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Subir Video</h3>
+                    <button class="close-btn" onclick="closeModal('uploadModal')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="uploadForm">
+                        <div class="upload-area" id="uploadArea">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                                <path d="M7 10L12 5L17 10M12 5V15" stroke="currentColor" stroke-width="2"/>
+                                <path d="M20 15V19C20 20 19 21 18 21H6C5 21 4 20 4 19V15" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                            <p>Arrastra tu video aquí o haz clic para seleccionar</p>
+                            <input type="file" id="videoInput" accept="video/*" hidden>
+                        </div>
+                        <div id="uploadProgress" class="upload-progress" style="display: none;">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                            <p id="progressText">Subiendo...</p>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="platformModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Agregar Plataforma</h3>
+                    <button class="close-btn" onclick="closeModal('platformModal')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="platformForm">
+                        <div class="form-group">
+                            <label>Nombre de la cuenta</label>
+                            <input type="text" id="platformName" placeholder="Mi canal de YouTube" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo de plataforma</label>
+                            <select id="platformType" onchange="updatePlatformHelp()">
+                                <option value="youtube">YouTube</option>
+                                <option value="facebook">Facebook</option>
+                                <option value="twitch">Twitch</option>
+                                <option value="custom">Personalizado</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>URL del servidor RTMP</label>
+                            <input type="text" id="rtmpUrl" placeholder="rtmp://a.rtmp.youtube.com/live2" required>
+                            <small id="rtmpHelp">Para YouTube: rtmp://a.rtmp.youtube.com/live2</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Clave de transmisión</label>
+                            <input type="text" id="streamKey" placeholder="Tu clave de transmisión" required>
+                            <small>Encuentra tu clave en YouTube Studio > Crear > Transmitir en vivo</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Guardar Plataforma</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="streamModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Configurar Transmisión</h3>
+                    <button class="close-btn" onclick="closeModal('streamModal')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <h4 id="streamVideoName"></h4>
+                    <p>Selecciona las plataformas donde quieres transmitir:</p>
+                    <div id="platformsList" class="platforms-list">
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-primary" onclick="startStreaming()">Iniciar Transmisión</button>
+                        <button class="btn btn-secondary" onclick="closeModal('streamModal')">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

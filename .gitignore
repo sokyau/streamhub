@@ -1,0 +1,31 @@
+# Dependencias de Node.js
+node_modules/
+npm-debug.log*
+
+# Base de datos
+db/
+*.db
+*.sqlite
+*.sqlite3
+
+# Videos subidos
+uploads/
+
+# Logs
+logs/
+*.log
+
+# Archivos de configuración con datos sensibles
+.env
+config.json
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# PM2
+.pm2/
