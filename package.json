@@ -13,20 +13,20 @@
     "migrate": "node db-migrate.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "sqlite3": "^5.1.6",
-    "ws": "^8.18.2",
-    "node-cron": "^3.0.3",
-    "axios": "^1.6.5",
-    "dropbox-v2-api": "^2.5.9",
-    "dotenv": "^16.3.1",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
+    "axios": "^1.9.0",
+    "bytes": "^3.1.2",
     "compression": "^1.7.4",
-    "morgan": "^1.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "dropbox-v2-api": "^2.5.11",
+    "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "sqlite3": "^5.1.6",
     "uuid": "^9.0.1",
-    "bytes": "^3.1.2"
+    "ws": "^8.18.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
