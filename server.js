@@ -1,142 +1,295 @@
 const express = require('express');
-const multer = require('multer');
 const sqlite3 = require('sqlite3').verbose();
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
-const crypto = require('crypto');
-const StreamScheduler = require('./scheduler'); // Nueva importación
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Configuración WebSocket para notificaciones en tiempo real
 const http = require('http');
 const WebSocket = require('ws');
+const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
+const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
+const { v4: uuidv4 } = require('uuid');
+const bytes = require('bytes');
+
+const DropboxService = require('./dropbox-service');
+const StreamScheduler = require('./scheduler');
+const config = require('./config');
+
+const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const storage = multer.diskStorage({
-    destination: async (req, file, cb) => {
-        const uploadDir = 'uploads/';
-        await fs.mkdir(uploadDir, { recursive: true });
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        const uniqueName = crypto.randomBytes(16).toString('hex') + path.extname(file.originalname);
-        cb(null, uniqueName);
-    }
-});
-
-const upload = multer({ 
-    storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 * 1024 }
-});
-
-app.use(express.json());
+// Middleware
+app.use(helmet({
+    contentSecurityPolicy: false,
+}));
+app.use(cors());
+app.use(compression());
+app.use(morgan('combined'));
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 
+// Rate limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100
+});
+app.use('/api/', limiter);
+
+// Database
 const db = new sqlite3.Database('db/streamhub.db');
 
-// Inicializar el scheduler
+// Services
+const dropboxService = new DropboxService(db);
 const scheduler = new StreamScheduler(db);
 
-// WebSocket broadcast
+// Active streams and downloads tracking
+const activeStreams = new Map();
+const activeDownloads = new Map();
+
+// WebSocket clients tracking
+const wsClients = new Map();
+
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+    const clientId = uuidv4();
+    wsClients.set(clientId, ws);
+    
+    ws.on('close', () => {
+        wsClients.delete(clientId);
+    });
+    
+    ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+        wsClients.delete(clientId);
+    });
+    
+    // Send initial status
+    ws.send(JSON.stringify({
+        type: 'connected',
+        clientId
+    }));
+});
+
+// Broadcast to all WebSocket clients
 function broadcast(type, data) {
-    const message = JSON.stringify({ type, data });
-    wss.clients.forEach(client => {
+    const message = JSON.stringify({ type, data, timestamp: new Date() });
+    wsClients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
             client.send(message);
         }
     });
 }
 
-// Configurar eventos del scheduler para notificaciones
-scheduler.on('stream:scheduled:started', (data) => {
-    broadcast('scheduled_stream_started', data);
-});
+// Initialize database
+async function initializeDatabase() {
+    return new Promise((resolve, reject) => {
+        db.serialize(() => {
+            // Existing tables
+            db.run(`CREATE TABLE IF NOT EXISTS videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                path TEXT NOT NULL,
+                size INTEGER,
+                source TEXT DEFAULT 'local',
+                dropbox_url TEXT,
+                uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`);
 
-scheduler.on('stream:scheduled:error', (data) => {
-    broadcast('scheduled_stream_error', data);
-});
+            db.run(`CREATE TABLE IF NOT EXISTS platforms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL,
+                rtmp_url TEXT NOT NULL,
+                stream_key TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`);
 
-scheduler.on('stream:conflict:resolved', (data) => {
-    broadcast('stream_conflict_resolved', data);
-});
+            db.run(`CREATE TABLE IF NOT EXISTS streams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                video_id INTEGER,
+                platform_id INTEGER,
+                status TEXT DEFAULT 'stopped',
+                process_pid INTEGER,
+                started_at DATETIME,
+                scheduled_at DATETIME,
+                error_message TEXT,
+                FOREIGN KEY (video_id) REFERENCES videos(id),
+                FOREIGN KEY (platform_id) REFERENCES platforms(id)
+            )`);
 
-scheduler.on('stream:scheduled:ended', (data) => {
-    broadcast('scheduled_stream_ended', data);
-});
+            // New tables for Dropbox integration
+            db.run(`CREATE TABLE IF NOT EXISTS dropbox_downloads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                download_id TEXT UNIQUE NOT NULL,
+                dropbox_url TEXT NOT NULL,
+                filename TEXT,
+                size INTEGER,
+                progress INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
+                error_message TEXT,
+                video_id INTEGER,
+                started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                completed_at DATETIME,
+                FOREIGN KEY (video_id) REFERENCES videos(id)
+            )`);
 
-// Inicializar base de datos y scheduler
-db.serialize(() => {
-    // Tablas existentes
-    db.run(`CREATE TABLE IF NOT EXISTS videos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filename TEXT NOT NULL,
-        original_name TEXT NOT NULL,
-        path TEXT NOT NULL,
-        size INTEGER,
-        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+            db.run(`CREATE TABLE IF NOT EXISTS api_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service TEXT NOT NULL,
+                access_token TEXT,
+                refresh_token TEXT,
+                expires_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`);
 
-    db.run(`CREATE TABLE IF NOT EXISTS platforms (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        rtmp_url TEXT NOT NULL,
-        stream_key TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS streams (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        video_id INTEGER,
-        platform_id INTEGER,
-        status TEXT DEFAULT 'stopped',
-        process_pid INTEGER,
-        started_at DATETIME,
-        scheduled_at DATETIME,
-        error_message TEXT,
-        FOREIGN KEY (video_id) REFERENCES videos(id),
-        FOREIGN KEY (platform_id) REFERENCES platforms(id)
-    )`);
-    
-    // Inicializar scheduler después de crear tablas
-    scheduler.initialize().then(() => {
-        console.log('Scheduler inicializado correctamente');
-    }).catch(err => {
-        console.error('Error al inicializar scheduler:', err);
+            // Create indexes
+            db.run(`CREATE INDEX IF NOT EXISTS idx_downloads_status ON dropbox_downloads(status)`);
+            db.run(`CREATE INDEX IF NOT EXISTS idx_downloads_download_id ON dropbox_downloads(download_id)`);
+            db.run(`CREATE INDEX IF NOT EXISTS idx_videos_source ON videos(source)`);
+            
+            resolve();
+        });
     });
+}
+
+// Initialize services
+async function initialize() {
+    try {
+        await initializeDatabase();
+        await dropboxService.initialize();
+        await scheduler.initialize();
+        
+        // Setup scheduler event listeners
+        scheduler.on('stream:scheduled:started', (data) => {
+            broadcast('scheduled_stream_started', data);
+        });
+        
+        scheduler.on('stream:scheduled:error', (data) => {
+            broadcast('scheduled_stream_error', data);
+        });
+        
+        scheduler.on('stream:conflict:resolved', (data) => {
+            broadcast('stream_conflict_resolved', data);
+        });
+        
+        scheduler.on('stream:scheduled:ended', (data) => {
+            broadcast('scheduled_stream_ended', data);
+        });
+        
+        // Setup dropbox event listeners
+        dropboxService.on('download:progress', (data) => {
+            broadcast('download_progress', data);
+        });
+        
+        dropboxService.on('download:complete', (data) => {
+            broadcast('download_complete', data);
+        });
+        
+        dropboxService.on('download:error', (data) => {
+            broadcast('download_error', data);
+        });
+        
+        console.log('Services initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize services:', error);
+        process.exit(1);
+    }
+}
+
+// ========== DROPBOX ENDPOINTS ==========
+
+// Download video from Dropbox URL
+app.post('/api/dropbox/download-url', async (req, res) => {
+    try {
+        const { url } = req.body;
+        
+        if (!url) {
+            return res.status(400).json({ error: 'URL de Dropbox requerida' });
+        }
+        
+        const downloadId = uuidv4();
+        const download = await dropboxService.downloadFromUrl(url, downloadId);
+        
+        activeDownloads.set(downloadId, download);
+        
+        res.json({
+            downloadId,
+            status: 'started',
+            message: 'Descarga iniciada'
+        });
+        
+    } catch (error) {
+        console.error('Error starting download:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
-const activeStreams = new Map();
-
-// ========== ENDPOINTS EXISTENTES ==========
-
-app.post('/api/upload', upload.single('video'), async (req, res) => {
+// Get download status
+app.get('/api/dropbox/download/:downloadId/status', async (req, res) => {
     try {
-        const { filename, originalname, path: filepath, size } = req.file;
+        const { downloadId } = req.params;
+        const status = await dropboxService.getDownloadStatus(downloadId);
         
-        db.run(
-            'INSERT INTO videos (filename, original_name, path, size) VALUES (?, ?, ?, ?)',
-            [filename, originalname, filepath, size],
-            function(err) {
-                if (err) {
-                    res.status(500).json({ error: err.message });
-                    return;
-                }
-                res.json({
-                    id: this.lastID,
-                    filename: originalname,
-                    size: size
-                });
-            }
-        );
+        if (!status) {
+            return res.status(404).json({ error: 'Descarga no encontrada' });
+        }
+        
+        res.json(status);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
+
+// Cancel download
+app.post('/api/dropbox/download/:downloadId/cancel', async (req, res) => {
+    try {
+        const { downloadId } = req.params;
+        await dropboxService.cancelDownload(downloadId);
+        
+        activeDownloads.delete(downloadId);
+        
+        res.json({ success: true, message: 'Descarga cancelada' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Setup Dropbox API
+app.post('/api/dropbox/setup-api', async (req, res) => {
+    try {
+        const { accessToken, refreshToken } = req.body;
+        
+        if (!accessToken) {
+            return res.status(400).json({ error: 'Access token requerido' });
+        }
+        
+        await dropboxService.setupAPI(accessToken, refreshToken);
+        
+        res.json({
+            success: true,
+            message: 'API de Dropbox configurada correctamente'
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get Dropbox API status
+app.get('/api/dropbox/api-status', async (req, res) => {
+    try {
+        const status = await dropboxService.getAPIStatus();
+        res.json(status);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ========== VIDEO ENDPOINTS ==========
 
 app.get('/api/videos', (req, res) => {
     db.all('SELECT * FROM videos ORDER BY uploaded_at DESC', (err, rows) => {
@@ -161,7 +314,9 @@ app.delete('/api/videos/:id', async (req, res) => {
         
         try {
             await fs.unlink(video.path);
-        } catch (e) {}
+        } catch (e) {
+            console.error('Error deleting file:', e);
+        }
         
         db.run('DELETE FROM streams WHERE video_id = ?', [videoId]);
         db.run('DELETE FROM videos WHERE id = ?', [videoId], (err) => {
@@ -173,6 +328,8 @@ app.delete('/api/videos/:id', async (req, res) => {
         });
     });
 });
+
+// ========== PLATFORM ENDPOINTS ==========
 
 app.get('/api/platforms', (req, res) => {
     db.all('SELECT * FROM platforms ORDER BY name', (err, rows) => {
@@ -234,6 +391,8 @@ app.delete('/api/platforms/:id', (req, res) => {
         res.json({ success: true });
     });
 });
+
+// ========== STREAMING ENDPOINTS ==========
 
 app.post('/api/stream/start', async (req, res) => {
     const { videoId, platformIds } = req.body;
@@ -297,7 +456,6 @@ app.post('/api/stream/start', async (req, res) => {
                 platformId
             });
             
-            // Actualizar scheduler activeStreams
             scheduler.activeStreams.set(streamKey, {
                 process: ffmpeg,
                 videoId,
@@ -320,6 +478,8 @@ app.post('/api/stream/start', async (req, res) => {
                     'UPDATE streams SET status = ?, error_message = ? WHERE video_id = ? AND platform_id = ? AND status = "streaming"',
                     [code === 0 ? 'completed' : 'error', code !== 0 ? `Exit code: ${code}` : null, videoId, platformId]
                 );
+                
+                broadcast('stream_ended', { videoId, platformId, code });
             });
             
             results.push({
@@ -388,14 +548,12 @@ app.get('/api/streams/history', (req, res) => {
     });
 });
 
-// ========== NUEVOS ENDPOINTS PARA PROGRAMACIÓN ==========
+// ========== SCHEDULE ENDPOINTS ==========
 
-// Obtener todas las programaciones
 app.get('/api/scheduled-streams', async (req, res) => {
     try {
         const schedules = await scheduler.getAllSchedules();
         
-        // Enriquecer con información de plataformas
         const enrichedSchedules = await Promise.all(schedules.map(async (schedule) => {
             const platformIds = JSON.parse(schedule.platform_ids);
             const platforms = await scheduler.getPlatforms(platformIds);
@@ -414,12 +572,10 @@ app.get('/api/scheduled-streams', async (req, res) => {
     }
 });
 
-// Crear nueva programación
 app.post('/api/scheduled-streams', async (req, res) => {
     try {
         const { videoId, platformIds, scheduleDays, scheduleTime } = req.body;
         
-        // Validaciones
         if (!videoId || !platformIds || !scheduleDays || !scheduleTime) {
             return res.status(400).json({ error: 'Faltan campos requeridos' });
         }
@@ -432,7 +588,6 @@ app.post('/api/scheduled-streams', async (req, res) => {
             return res.status(400).json({ error: 'Debe seleccionar al menos un día' });
         }
         
-        // Validar formato de hora HH:MM
         const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
         if (!timeRegex.test(scheduleTime)) {
             return res.status(400).json({ error: 'Formato de hora inválido (use HH:MM)' });
@@ -451,7 +606,6 @@ app.post('/api/scheduled-streams', async (req, res) => {
     }
 });
 
-// Actualizar programación
 app.put('/api/scheduled-streams/:id', async (req, res) => {
     try {
         const scheduleId = parseInt(req.params.id);
@@ -470,7 +624,6 @@ app.put('/api/scheduled-streams/:id', async (req, res) => {
     }
 });
 
-// Eliminar programación
 app.delete('/api/scheduled-streams/:id', async (req, res) => {
     try {
         const scheduleId = parseInt(req.params.id);
@@ -481,7 +634,6 @@ app.delete('/api/scheduled-streams/:id', async (req, res) => {
     }
 });
 
-// Obtener logs de una programación
 app.get('/api/scheduled-streams/:id/logs', async (req, res) => {
     try {
         const scheduleId = parseInt(req.params.id);
@@ -492,7 +644,7 @@ app.get('/api/scheduled-streams/:id/logs', async (req, res) => {
     }
 });
 
-// Funciones auxiliares existentes
+// Helper functions
 function stopAllStreamsForVideo(videoId) {
     activeStreams.forEach((stream, key) => {
         if (stream.videoId == videoId) {
@@ -513,8 +665,21 @@ function stopAllStreamsForPlatform(platformId) {
     });
 }
 
-// Usar server en lugar de app.listen para WebSocket
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`StreamHub ejecutándose en http://localhost:${PORT}`);
-    console.log('WebSocket disponible para notificaciones en tiempo real');
+// Error handler
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Error interno del servidor' });
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
+initialize().then(() => {
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`StreamHub ejecutándose en http://localhost:${PORT}`);
+        console.log('WebSocket disponible para notificaciones en tiempo real');
+        console.log('Integración con Dropbox activada');
+    });
+}).catch(error => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
 });
