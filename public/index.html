@@ -3,345 +3,330 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StreamHub - Centro de Transmisión</title>
+    <title>StreamHub - Control de Transmisiones</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="app">
-        <header class="header">
-            <div class="logo">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                    <path d="M10 9L15 12L10 15V9Z" fill="currentColor"/>
-                </svg>
-                <h1>StreamHub</h1>
-            </div>
-            <div class="header-actions">
-                <button class="btn btn-primary" onclick="showDropboxModal()">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor"/>
-                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" fill="none"/>
-                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" fill="none"/>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                        <path d="M15 10L19.5528 7.72361C20.2177 7.39116 21 7.87465 21 8.61803V15.382C21 16.1253 20.2177 16.6088 19.5528 16.2764L15 14M5 18H13C14.1046 18 15 17.1046 15 16V8C15 6.89543 14.1046 6 13 6H5C3.89543 6 3 6.89543 3 8V16C3 17.1046 3.89543 18 5 18Z" stroke="currentColor" stroke-width="2"/>
                     </svg>
-                    Importar de Dropbox
-                </button>
-                <button class="btn btn-secondary" onclick="showPlatformModal()">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 4V20M4 12H20" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                    Agregar Plataforma
-                </button>
-                <button class="btn btn-icon" onclick="showSettingsModal()">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2"/>
-                        <path d="M19.4 15C19.2669 15.3016 19.2272 15.6362 19.286 15.9606C19.3448 16.285 19.4995 16.5843 19.73 16.82L19.79 16.88C19.976 17.0657 20.1235 17.2863 20.2241 17.5291C20.3248 17.7719 20.3766 18.0322 20.3766 18.295C20.3766 18.5578 20.3248 18.8181 20.2241 19.0609C20.1235 19.3037 19.976 19.5243 19.79 19.71C19.6043 19.896 19.3837 20.0435 19.1409 20.1441C18.8981 20.2448 18.6378 20.2966 18.375 20.2966C18.1122 20.2966 17.8519 20.2448 17.6091 20.1441C17.3663 20.0435 17.1457 19.896 16.96 19.71L16.9 19.65C16.6643 19.4195 16.365 19.2648 16.0406 19.206C15.7162 19.1472 15.3816 19.1869 15.08 19.32C14.7842 19.4468 14.532 19.6572 14.3543 19.9255C14.1766 20.1938 14.0813 20.5082 14.08 20.83V21C14.08 21.5304 13.8693 22.0391 13.4942 22.4142C13.1191 22.7893 12.6104 23 12.08 23C11.5496 23 11.0409 22.7893 10.6658 22.4142C10.2907 22.0391 10.08 21.5304 10.08 21V20.91C10.0723 20.579 9.96512 20.258 9.77251 19.9887C9.5799 19.7194 9.31074 19.5143 9 19.4C8.69838 19.2669 8.36381 19.2272 8.03941 19.286C7.71502 19.3448 7.41568 19.4995 7.18 19.73L7.12 19.79C6.93425 19.976 6.71368 20.1235 6.47088 20.2241C6.22808 20.3248 5.96783 20.3766 5.705 20.3766C5.44217 20.3766 5.18192 20.3248 4.93912 20.2241C4.69632 20.1235 4.47575 19.976 4.29 19.79C4.10405 19.6043 3.95653 19.3837 3.85588 19.1409C3.75523 18.8981 3.70343 18.6378 3.70343 18.375C3.70343 18.1122 3.75523 17.8519 3.85588 17.6091C3.95653 17.3663 4.10405 17.1457 4.29 16.96L4.35 16.9C4.58054 16.6643 4.73519 16.365 4.794 16.0406C4.85282 15.7162 4.81312 15.3816 4.68 15.08C4.55324 14.7842 4.34276 14.532 4.07447 14.3543C3.80618 14.1766 3.49179 14.0813 3.17 14.08H3C2.46957 14.08 1.96086 13.8693 1.58579 13.4942C1.21071 13.1191 1 12.6104 1 12.08C1 11.5496 1.21071 11.0409 1.58579 10.6658C1.96086 10.2907 2.46957 10.08 3 10.08H3.09C3.42099 10.0723 3.742 9.96512 4.0113 9.77251C4.28059 9.5799 4.48572 9.31074 4.6 9C4.73312 8.69838 4.77282 8.36381 4.714 8.03941C4.65519 7.71502 4.50054 7.41568 4.27 7.18L4.21 7.12C4.02405 6.93425 3.87653 6.71368 3.77588 6.47088C3.67523 6.22808 3.62343 5.96783 3.62343 5.705C3.62343 5.44217 3.67523 5.18192 3.77588 4.93912C3.87653 4.69632 4.02405 4.47575 4.21 4.29C4.39575 4.10405 4.61632 3.95653 4.85912 3.85588C5.10192 3.75523 5.36217 3.70343 5.625 3.70343C5.88783 3.70343 6.14808 3.75523 6.39088 3.85588C6.63368 3.95653 6.85425 4.10405 7.04 4.29L7.1 4.35C7.33568 4.58054 7.63502 4.73519 7.95941 4.794C8.28381 4.85282 8.61838 4.81312 8.92 4.68H9C9.29577 4.55324 9.54802 4.34276 9.72569 4.07447C9.90337 3.80618 9.99872 3.49179 10 3.17V3C10 2.46957 10.2107 1.96086 10.5858 1.58579C10.9609 1.21071 11.4696 1 12 1C12.5304 1 13.0391 1.21071 13.4142 1.58579C13.7893 1.96086 14 2.46957 14 3V3.09C14.0013 3.41179 14.0966 3.72618 14.2743 3.99447C14.452 4.26276 14.7042 4.47324 15 4.6C15.3016 4.73312 15.6362 4.77282 15.9606 4.714C16.285 4.65519 16.5843 4.50054 16.82 4.27L16.88 4.21C17.0657 4.02405 17.2863 3.87653 17.5291 3.77588C17.7719 3.67523 18.0322 3.62343 18.295 3.62343C18.5578 3.62343 18.8181 3.67523 19.0609 3.77588C19.3037 3.87653 19.5243 4.02405 19.71 4.21C19.896 4.39575 20.0435 4.61632 20.1441 4.85912C20.2448 5.10192 20.2966 5.36217 20.2966 5.625C20.2966 5.88783 20.2448 6.14808 20.1441 6.39088C20.0435 6.63368 19.896 6.85425 19.71 7.04L19.65 7.1C19.4195 7.33568 19.2648 7.63502 19.206 7.95941C19.1472 8.28381 19.1869 8.61838 19.32 8.92V9C19.4468 9.29577 19.6572 9.54802 19.9255 9.72569C20.1938 9.90337 20.5082 9.99872 20.83 10H21C21.5304 10 22.0391 10.2107 22.4142 10.5858C22.7893 10.9609 23 11.4696 23 12C23 12.5304 22.7893 13.0391 22.4142 13.4142C22.0391 13.7893 21.5304 14 21 14H20.91C20.5882 14.0013 20.2738 14.0966 20.0055 14.2743C19.7372 14.452 19.5268 14.7042 19.4 15Z" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </button>
+                    <h1>StreamHub</h1>
+                </div>
+                <nav class="header-nav">
+                    <button class="btn btn-secondary" onclick="showModal('dropboxModal')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7L7 9.5L12 7L17 9.5L22 7L12 2Z" fill="currentColor"/>
+                            <path d="M2 17L7 14.5L12 17L17 14.5L22 17L12 22L2 17Z" fill="currentColor" opacity="0.6"/>
+                            <path d="M7 9.5L2 12L7 14.5L12 12L7 9.5Z" fill="currentColor"/>
+                            <path d="M17 9.5L12 12L17 14.5L22 12L17 9.5Z" fill="currentColor"/>
+                        </svg>
+                        Importar de Dropbox
+                    </button>
+                    <button class="btn btn-secondary" onclick="showPlatformModal()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2"/>
+                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        Agregar Plataforma
+                    </button>
+                    <button class="btn btn-icon" onclick="showSettingsModal()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2"/>
+                            <path d="M19.4 15C19.1277 15.6171 19.2583 16.3378 19.73 16.82L19.79 16.88C20.1656 17.2551 20.3766 17.7642 20.3766 18.295C20.3766 18.8258 20.1656 19.3349 19.79 19.71C19.4149 20.0856 18.9058 20.2966 18.375 20.2966C17.8442 20.2966 17.3351 20.0856 16.96 19.71L16.9 19.65C16.4178 19.1783 15.6971 19.0477 15.08 19.32C14.4755 19.5791 14.0826 20.1724 14.08 20.83V21C14.08 22.1046 13.1846 23 12.08 23H12C10.8954 23 10 22.1046 10 21V20.91C9.99734 20.2327 9.58273 19.6277 9 19.37C8.38291 19.0977 7.66219 19.2283 7.18 19.7L7.12 19.76C6.74493 20.1356 6.23582 20.3466 5.705 20.3466C5.17418 20.3466 4.66507 20.1356 4.29 19.76C3.91445 19.3849 3.70343 18.8758 3.70343 18.345C3.70343 17.8142 3.91445 17.3051 4.29 16.93L4.35 16.87C4.82167 16.3878 4.95227 15.6671 4.68 15.05C4.42093 14.4455 3.82764 14.0526 3.17 14.05H3C1.89543 14.05 1 13.1546 1 12.05V12C1 10.8954 1.89543 10 3 10H3.09C3.76734 9.99734 4.37228 9.58273 4.63 9C4.90227 8.38291 4.77167 7.66219 4.3 7.18L4.24 7.12C3.86445 6.74493 3.65343 6.23582 3.65343 5.705C3.65343 5.17418 3.86445 4.66507 4.24 4.29C4.61507 3.91445 5.12418 3.70343 5.655 3.70343C6.18582 3.70343 6.69493 3.91445 7.07 4.29L7.13 4.35C7.61219 4.82167 8.33291 4.95227 8.95 4.68H9C9.60448 4.42093 10.0 3.82764 10 3.17V3C10 1.89543 10.8954 1 12 1C13.1046 1 14 1.89543 14 3V3.09C14 3.74764 14.3955 4.34093 15 4.6C15.6171 4.87227 16.3378 4.74167 16.82 4.27L16.88 4.21C17.2551 3.83445 17.7642 3.62343 18.295 3.62343C18.8258 3.62343 19.3349 3.83445 19.71 4.21C20.0856 4.58507 20.2966 5.09418 20.2966 5.625C20.2966 6.15582 20.0856 6.66493 19.71 7.04L19.65 7.1C19.1783 7.58219 19.0477 8.30291 19.32 8.92V9C19.5791 9.60448 20.1724 10 20.83 10H21C22.1046 10 23 10.8954 23 12C23 13.1046 22.1046 14 21 14H20.91C20.2524 14 19.6591 14.3955 19.4 15Z" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </button>
+                </nav>
             </div>
         </header>
 
         <main class="main-content">
-            <!-- Downloads section -->
-            <section class="downloads-section" id="downloadsSection" style="display: none;">
-                <h2>Descargas Activas</h2>
-                <div id="activeDownloads" class="downloads-list">
-                    <!-- Active downloads will be shown here -->
-                </div>
-            </section>
-
-            <!-- Tabs -->
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('streaming')">Streaming</button>
+                <button class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
                 <button class="tab" onclick="switchTab('schedule')">Programación</button>
             </div>
 
-            <!-- Streaming content -->
-            <div id="streaming-tab" class="tab-content active">
-                <section class="videos-section">
-                    <h2>Mis Videos</h2>
-                    <div id="videosList" class="videos-grid">
-                        <!-- Videos will be loaded here -->
+            <div id="dashboard-tab" class="tab-content active">
+                <section class="content-section">
+                    <div class="section-header">
+                        <h2>Transmisiones Activas</h2>
+                        <span class="badge" id="activeCount">0</span>
+                    </div>
+                    <div id="activeStreams" class="streams-list">
+                        <p style="text-align: center; color: var(--text-secondary);">
+                            No hay transmisiones activas
+                        </p>
                     </div>
                 </section>
 
-                <section class="streams-section">
-                    <h2>Transmisiones Activas</h2>
-                    <div id="activeStreams" class="streams-list">
-                        <!-- Active streams will be shown here -->
+                <section id="downloadsSection" class="content-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Descargas Activas</h2>
                     </div>
+                    <div id="activeDownloads"></div>
+                </section>
+
+                <section class="content-section">
+                    <div class="section-header">
+                        <h2>Videos Disponibles</h2>
+                        <span class="badge" id="videoCount">0</span>
+                    </div>
+                    <div id="videosList" class="videos-grid"></div>
                 </section>
             </div>
 
-            <!-- Schedule content -->
             <div id="schedule-tab" class="tab-content">
-                <section class="schedule-section">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                        <h2>Programaciones</h2>
+                <section class="content-section">
+                    <div class="section-header">
+                        <h2>Transmisiones Programadas</h2>
                         <button class="btn btn-primary" onclick="showScheduleModal()">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                                <path d="M12 5V19M5 12L12 5L19 12" stroke="currentColor" stroke-width="2"/>
+                                <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2"/>
                             </svg>
                             Nueva Programación
                         </button>
                     </div>
-                    <div id="schedulesList">
-                        <!-- Schedules will be loaded here -->
-                    </div>
+                    <div id="schedulesList" class="schedules-list"></div>
                 </section>
             </div>
         </main>
+    </div>
 
-        <!-- Dropbox import modal -->
-        <div id="dropboxModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Importar desde Dropbox</h3>
-                    <button class="close-btn" onclick="closeModal('dropboxModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="dropbox-input-section">
-                        <p class="help-text">Pega el enlace de Dropbox del video que deseas importar</p>
-                        
-                        <div class="form-group">
-                            <label>URL de Dropbox</label>
-                            <input type="url" 
-                                   id="dropboxUrl" 
-                                   placeholder="https://www.dropbox.com/s/xxxxx/video.mp4?dl=0"
-                                   class="dropbox-url-input">
-                            <small class="help-text">Acepta enlaces compartidos de Dropbox (dl=0 o dl=1)</small>
-                        </div>
-
-                        <div class="dropbox-actions">
-                            <button class="btn btn-primary" onclick="startDropboxDownload()">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                                    <path d="M21 15V19C21 20 20 21 19 21H5C4 21 3 20 3 19V15" stroke="currentColor" stroke-width="2"/>
-                                    <path d="M12 3V15M19 8L12 15L5 8" stroke="currentColor" stroke-width="2"/>
-                                </svg>
-                                Iniciar Descarga
-                            </button>
-                        </div>
-
-                        <div class="divider">
-                            <span>o</span>
-                        </div>
-
-                        <div class="api-section">
-                            <p class="help-text">Configura la API de Dropbox para funciones avanzadas</p>
-                            <button class="btn btn-secondary" onclick="showDropboxAPIConfig()">
-                                Configurar API de Dropbox
-                            </button>
-                        </div>
-                    </div>
-                </div>
+    <div id="streamModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Transmitir Video</h3>
+                <button class="close-btn" onclick="closeModal('streamModal')">&times;</button>
             </div>
-        </div>
-
-        <!-- Download progress modal -->
-        <div id="downloadProgressModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Descargando Video</h3>
-                </div>
-                <div class="modal-body">
-                    <div class="download-info">
-                        <p id="downloadFileName" class="filename">Preparando descarga...</p>
-                        <p id="downloadStatus" class="status">Conectando...</p>
-                    </div>
-                    
-                    <div class="progress-container">
-                        <div class="progress-bar large">
-                            <div class="progress-fill" id="downloadProgressFill"></div>
-                        </div>
-                        <div class="progress-stats">
-                            <span id="downloadProgress">0%</span>
-                            <span id="downloadSpeed">--</span>
-                            <span id="downloadSize">--</span>
-                        </div>
-                    </div>
-                    
-                    <div class="download-actions">
-                        <button class="btn btn-danger" onclick="cancelDownload()">
-                            Cancelar Descarga
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Settings modal -->
-        <div id="settingsModal" class="modal">
-            <div class="modal-content modal-large">
-                <div class="modal-header">
-                    <h3>Configuración</h3>
-                    <button class="close-btn" onclick="closeModal('settingsModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="settings-section">
-                        <h4>API de Dropbox</h4>
-                        <div id="dropboxAPIStatus" class="api-status">
-                            <!-- API status will be shown here -->
-                        </div>
-                        
-                        <form id="dropboxAPIForm" class="settings-form">
-                            <div class="form-group">
-                                <label>Access Token</label>
-                                <input type="text" id="dropboxAccessToken" placeholder="Tu access token de Dropbox">
-                                <small>Obtén tu token desde <a href="https://www.dropbox.com/developers/apps" target="_blank">Dropbox App Console</a></small>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Refresh Token (Opcional)</label>
-                                <input type="text" id="dropboxRefreshToken" placeholder="Para renovación automática">
-                                <small>Permite renovar el token automáticamente</small>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-primary">Guardar Configuración</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Platform modal (existing) -->
-        <div id="platformModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Agregar Plataforma</h3>
-                    <button class="close-btn" onclick="closeModal('platformModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <form id="platformForm">
-                        <div class="form-group">
-                            <label>Nombre de la cuenta</label>
-                            <input type="text" id="platformName" placeholder="Mi canal de YouTube" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Tipo de plataforma</label>
-                            <select id="platformType" onchange="updatePlatformHelp()">
-                                <option value="youtube">YouTube</option>
-                                <option value="facebook">Facebook</option>
-                                <option value="twitch">Twitch</option>
-                                <option value="custom">Personalizado</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>URL del servidor RTMP</label>
-                            <input type="text" id="rtmpUrl" placeholder="rtmp://a.rtmp.youtube.com/live2" required>
-                            <small id="rtmpHelp">Para YouTube: rtmp://a.rtmp.youtube.com/live2</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Clave de transmisión</label>
-                            <input type="text" id="streamKey" placeholder="Tu clave de transmisión" required>
-                            <small>Encuentra tu clave en YouTube Studio > Crear > Transmitir en vivo</small>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Guardar Plataforma</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Stream modal (existing) -->
-        <div id="streamModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Configurar Transmisión</h3>
-                    <button class="close-btn" onclick="closeModal('streamModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <h4 id="streamVideoName"></h4>
-                    <p>Selecciona las plataformas donde quieres transmitir:</p>
-                    <div id="platformsList" class="platforms-list">
-                    </div>
-                    <div class="modal-actions">
-                        <button class="btn btn-primary" onclick="startStreaming()">Iniciar Transmisión</button>
-                        <button class="btn btn-secondary" onclick="closeModal('streamModal')">Cancelar</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Schedule modal (existing) -->
-        <div id="scheduleModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Nueva Programación</h3>
-                    <button class="close-btn" onclick="closeModal('scheduleModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <form id="scheduleForm" class="schedule-form">
-                        <div class="form-group">
-                            <label>Selecciona el video</label>
-                            <select id="scheduleVideo" required>
-                                <option value="">-- Selecciona un video --</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Días de la semana</label>
-                            <div class="day-selector">
-                                <label class="day-checkbox">
-                                    <input type="checkbox" name="scheduleDays" value="0">
-                                    <span>D</span>
-                                    <small>Dom</small>
-                                </label>
-                                <label class="day-checkbox">
-                                    <input type="checkbox" name="scheduleDays" value="1">
-                                    <span>L</span>
-                                    <small>Lun</small>
-                                </label>
-                                <label class="day-checkbox">
-                                    <input type="checkbox" name="scheduleDays" value="2">
-                                    <span>M</span>
-                                    <small>Mar</small>
-                                </label>
-                                <label class="day-checkbox">
-                                    <input type="checkbox" name="scheduleDays" value="3">
-                                    <span>X</span>
-                                    <small>Mié</small>
-                                </label>
-                                <label class="day-checkbox">
-                                    <input type="checkbox" name="scheduleDays" value="4">
-                                    <span>J</span>
-                                    <small>Jue</small>
-                                </label>
-                                <label class="day-checkbox">
-                                    <input type="checkbox" name="scheduleDays" value="5">
-                                    <span>V</span>
-                                    <small>Vie</small>
-                                </label>
-                                <label class="day-checkbox">
-                                    <input type="checkbox" name="scheduleDays" value="6">
-                                    <span>S</span>
-                                    <small>Sáb</small>
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Hora de transmisión</label>
-                            <input type="time" id="scheduleTime" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Plataformas de destino</label>
-                            <div id="schedulePlatformsList" class="platforms-list">
-                                <!-- Platforms will be loaded here -->
-                            </div>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-primary">Guardar Programación</button>
-                    </form>
+            <div class="modal-body">
+                <p>Video: <strong id="streamVideoName"></strong></p>
+                
+                <div class="loop-controls-section"></div>
+                
+                <h4>Selecciona las plataformas:</h4>
+                <div id="platformsList" class="platforms-list"></div>
+                
+                <div class="modal-actions">
+                    <button class="btn btn-primary" onclick="startStreaming()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M8 5V19L19 12L8 5Z" fill="currentColor"/>
+                        </svg>
+                        Iniciar Transmisión
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal('streamModal')">Cancelar</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Notifications container -->
-    <div id="notifications"></div>
+    <div id="platformModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Agregar Plataforma</h3>
+                <button class="close-btn" onclick="closeModal('platformModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="platformForm">
+                    <div class="form-group">
+                        <label for="platformName">Nombre de la Plataforma</label>
+                        <input type="text" id="platformName" required placeholder="Mi Stream">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="platformType">Tipo de Plataforma</label>
+                        <select id="platformType" required onchange="updatePlatformHelp()">
+                            <option value="">-- Selecciona --</option>
+                            <option value="youtube">YouTube</option>
+                            <option value="facebook">Facebook</option>
+                            <option value="twitch">Twitch</option>
+                            <option value="custom">Personalizada</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="rtmpUrl">URL RTMP</label>
+                        <input type="text" id="rtmpUrl" required placeholder="rtmp://...">
+                        <small id="rtmpHelp">Selecciona un tipo de plataforma para ver la URL recomendada</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="streamKey">Clave de Transmisión</label>
+                        <input type="password" id="streamKey" required placeholder="xxxx-xxxx-xxxx-xxxx">
+                        <small>Encuentra tu clave de transmisión en la configuración de tu plataforma</small>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary">Guardar Plataforma</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('platformModal')">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="dropboxModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Importar de Dropbox</h3>
+                <button class="close-btn" onclick="closeModal('dropboxModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="dropboxUrl">URL de Dropbox</label>
+                    <input type="url" id="dropboxUrl" placeholder="https://www.dropbox.com/...">
+                    <small>Pega el enlace compartido de Dropbox del video</small>
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="btn btn-primary" onclick="startDropboxDownload()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15M7 10L12 15M12 15L17 10M12 15V3" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        Descargar
+                    </button>
+                    <button class="btn btn-secondary" onclick="showDropboxAPIConfig()">
+                        Configurar API
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal('dropboxModal')">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="downloadProgressModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Descargando Video</h3>
+            </div>
+            <div class="modal-body">
+                <div class="download-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="downloadProgressFill"></div>
+                    </div>
+                    <div class="progress-info">
+                        <span id="downloadProgress">0%</span>
+                        <span id="downloadSpeed">--</span>
+                    </div>
+                </div>
+                <p class="download-details">
+                    <span id="downloadStatus">Preparando descarga...</span><br>
+                    <span id="downloadSize">-- / --</span>
+                </p>
+                
+                <div class="modal-actions">
+                    <button class="btn btn-danger" onclick="cancelDownload()">Cancelar Descarga</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Configuración</h3>
+                <button class="close-btn" onclick="closeModal('settingsModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h4>API de Dropbox</h4>
+                <div id="dropboxAPIStatus" class="api-status"></div>
+                
+                <form id="dropboxAPIForm">
+                    <div class="form-group">
+                        <label for="dropboxAccessToken">Access Token</label>
+                        <input type="password" id="dropboxAccessToken" required>
+                        <small>Obtén tu token desde la consola de desarrolladores de Dropbox</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="dropboxRefreshToken">Refresh Token (Opcional)</label>
+                        <input type="password" id="dropboxRefreshToken">
+                        <small>Para mantener el acceso permanente</small>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary">Guardar Configuración</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('settingsModal')">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="scheduleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Programar Transmisión</h3>
+                <button class="close-btn" onclick="closeModal('scheduleModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="scheduleForm">
+                    <div class="form-group">
+                        <label for="scheduleVideo">Video</label>
+                        <select id="scheduleVideo" required>
+                            <option value="">-- Selecciona un video --</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Días de la Semana</label>
+                        <div class="days-selector">
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="0">
+                                <span>Dom</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="1">
+                                <span>Lun</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="2">
+                                <span>Mar</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="3">
+                                <span>Mié</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="4">
+                                <span>Jue</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="5">
+                                <span>Vie</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="6">
+                                <span>Sáb</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="scheduleTime">Hora de Inicio</label>
+                        <input type="time" id="scheduleTime" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Plataformas</label>
+                        <div id="schedulePlatformsList" class="platforms-list"></div>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary">Programar</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('scheduleModal')">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="notifications" class="notifications-container"></div>
 
     <script src="app.js"></script>
-    <script src="dropbox-manager.js"></script>
-    <script src="scheduler-ui.js"></script>
+    <script src="loop-ui.js"></script>
 </body>
 </html>

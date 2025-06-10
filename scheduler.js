@@ -1,31 +1,32 @@
-// scheduler.js - Servicio de programación de streams
 const cron = require('node-cron');
 const { spawn } = require('child_process');
 const path = require('path');
 const EventEmitter = require('events');
+const LoopManager = require('./loop-manager');
+const FFmpegLoopBuilder = require('./ffmpeg-loop-builder');
 
 class StreamScheduler extends EventEmitter {
     constructor(db) {
         super();
         this.db = db;
         this.scheduledJobs = new Map();
-        this.activeStreams = new Map(); // Mantener registro de streams activos
+        this.activeStreams = new Map();
+        this.loopManager = new LoopManager(db);
+        this.ffmpegLoopBuilder = new FFmpegLoopBuilder();
     }
 
-    // Inicializar el scheduler
     async initialize() {
         await this.createTables();
         await this.loadScheduledStreams();
+        await this.loopManager.initialize();
         
-        // Verificar programaciones cada minuto
         cron.schedule('* * * * *', () => {
             this.checkScheduledStreams();
         });
         
-        console.log('Stream Scheduler inicializado');
+        console.log('Stream Scheduler inicializado con soporte de bucles');
     }
 
-    // Crear tablas si no existen
     async createTables() {
         const createScheduledStreamsTable = `
             CREATE TABLE IF NOT EXISTS scheduled_streams (
@@ -35,6 +36,7 @@ class StreamScheduler extends EventEmitter {
                 schedule_days TEXT NOT NULL,
                 schedule_time TIME NOT NULL,
                 is_active BOOLEAN DEFAULT 1,
+                loop_config TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 last_run DATETIME,
                 next_run DATETIME,
@@ -71,7 +73,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Cargar streams programados activos
     async loadScheduledStreams() {
         return new Promise((resolve, reject) => {
             this.db.all(
@@ -89,11 +90,10 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Verificar y ejecutar streams programados
     async checkScheduledStreams() {
         const now = new Date();
-        const currentTime = now.toTimeString().slice(0, 5); // HH:MM
-        const currentDay = now.getDay(); // 0-6
+        const currentTime = now.toTimeString().slice(0, 5);
+        const currentDay = now.getDay();
 
         this.db.all(
             `SELECT s.*, v.path, v.original_name 
@@ -109,7 +109,6 @@ class StreamScheduler extends EventEmitter {
                 for (const schedule of rows) {
                     const scheduleDays = JSON.parse(schedule.schedule_days);
                     
-                    // Verificar si es el día y hora correctos
                     if (scheduleDays.includes(currentDay) && 
                         schedule.schedule_time === currentTime &&
                         this.shouldRunNow(schedule)) {
@@ -121,7 +120,6 @@ class StreamScheduler extends EventEmitter {
         );
     }
 
-    // Verificar si debe ejecutarse ahora
     shouldRunNow(schedule) {
         if (!schedule.last_run) return true;
         
@@ -129,32 +127,25 @@ class StreamScheduler extends EventEmitter {
         const now = new Date();
         const diffMinutes = (now - lastRun) / (1000 * 60);
         
-        // No ejecutar si ya se ejecutó en los últimos 50 minutos
         return diffMinutes > 50;
     }
 
-    // Ejecutar stream programado
     async executeScheduledStream(schedule) {
         const platformIds = JSON.parse(schedule.platform_ids);
         
-        // Verificar conflictos y detener streams activos si es necesario
         const conflicts = await this.checkConflicts(platformIds);
         if (conflicts.length > 0) {
             await this.resolveConflicts(conflicts, schedule.id);
         }
 
-        // Iniciar el nuevo stream
         try {
-            await this.startScheduledStream(schedule.video_id, platformIds);
+            await this.startScheduledStream(schedule.video_id, platformIds, schedule);
             
-            // Actualizar última ejecución
             await this.updateLastRun(schedule.id);
             
-            // Registrar en logs
             await this.logAction(schedule.id, 'started', 
                 `Stream iniciado para video: ${schedule.original_name}`);
             
-            // Emitir evento para notificación
             this.emit('stream:scheduled:started', {
                 scheduleId: schedule.id,
                 videoName: schedule.original_name,
@@ -171,7 +162,6 @@ class StreamScheduler extends EventEmitter {
         }
     }
 
-    // Verificar conflictos con streams activos
     async checkConflicts(platformIds) {
         const conflicts = [];
         
@@ -191,24 +181,18 @@ class StreamScheduler extends EventEmitter {
         return conflicts;
     }
 
-    // Resolver conflictos deteniendo streams activos
     async resolveConflicts(conflicts, scheduleId) {
         for (const conflict of conflicts) {
             try {
-                // Detener el proceso
                 conflict.process.kill('SIGTERM');
                 
-                // Remover del mapa de streams activos
                 this.activeStreams.delete(conflict.key);
                 
-                // Actualizar base de datos
                 await this.updateStreamStatus(conflict.videoId, conflict.platformId, 'stopped');
                 
-                // Registrar en logs
                 await this.logAction(scheduleId, 'conflict_resolved', 
                     `Stream detenido - Video ID: ${conflict.videoId}, Platform ID: ${conflict.platformId}`);
                 
-                // Emitir evento
                 this.emit('stream:conflict:resolved', {
                     scheduleId,
                     stoppedVideoId: conflict.videoId,
@@ -221,52 +205,90 @@ class StreamScheduler extends EventEmitter {
         }
     }
 
-    // Iniciar stream programado
-    async startScheduledStream(videoId, platformIds) {
-        // Obtener información del video y plataformas
+    async startScheduledStream(videoId, platformIds, schedule) {
         const video = await this.getVideo(videoId);
         const platforms = await this.getPlatforms(platformIds);
+        
+        let loopConfigId = null;
+        if (schedule.loop_config) {
+            const loopConfig = JSON.parse(schedule.loop_config);
+            if (loopConfig.enabled) {
+                const config = await this.loopManager.createLoopConfig({
+                    type: loopConfig.type,
+                    videoIds: loopConfig.videoIds || [videoId],
+                    durationHours: loopConfig.durationHours,
+                    repeatCount: loopConfig.repeatCount,
+                    infinite: loopConfig.infinite,
+                    name: `Scheduled - ${schedule.original_name}`
+                });
+                loopConfigId = config.id;
+            }
+        }
         
         for (const platform of platforms) {
             const streamKey = `${videoId}-${platform.id}`;
             const rtmpUrl = `${platform.rtmp_url}/${platform.stream_key}`;
             
-            const ffmpeg = spawn('ffmpeg', [
-                '-re',
-                '-i', video.path,
-                '-c:v', 'libx264',
-                '-preset', 'veryfast',
-                '-maxrate', '3000k',
-                '-bufsize', '6000k',
-                '-pix_fmt', 'yuv420p',
-                '-g', '50',
-                '-c:a', 'aac',
-                '-b:a', '160k',
-                '-ar', '44100',
-                '-f', 'flv',
-                rtmpUrl
-            ]);
+            let ffmpegArgs;
+            if (loopConfigId) {
+                const videos = schedule.loop_config && JSON.parse(schedule.loop_config).videoIds ? 
+                    await this.loopManager.validateVideoFiles(JSON.parse(schedule.loop_config).videoIds) : 
+                    [video];
+                    
+                ffmpegArgs = await this.ffmpegLoopBuilder.createLoopCommand(videos, {
+                    infinite: schedule.loop_config && JSON.parse(schedule.loop_config).infinite,
+                    repeatCount: schedule.loop_config && JSON.parse(schedule.loop_config).repeatCount,
+                    outputUrl: rtmpUrl
+                });
+            } else {
+                ffmpegArgs = [
+                    '-re',
+                    '-i', video.path,
+                    '-c:v', 'libx264',
+                    '-preset', 'veryfast',
+                    '-maxrate', '3000k',
+                    '-bufsize', '6000k',
+                    '-pix_fmt', 'yuv420p',
+                    '-g', '50',
+                    '-c:a', 'aac',
+                    '-b:a', '160k',
+                    '-ar', '44100',
+                    '-f', 'flv',
+                    rtmpUrl
+                ];
+            }
+            
+            const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+            
+            const streamId = await this.saveStreamRecord(videoId, platform.id, ffmpeg.pid, loopConfigId);
             
             this.activeStreams.set(streamKey, {
                 process: ffmpeg,
                 videoId,
                 platformId: platform.id,
-                startedAt: new Date()
+                startedAt: new Date(),
+                streamId,
+                loopConfigId
             });
             
-            // Guardar en base de datos
-            await this.saveStreamRecord(videoId, platform.id, ffmpeg.pid);
+            if (loopConfigId) {
+                await this.loopManager.startLoopSession(loopConfigId, streamId);
+            }
             
             ffmpeg.stderr.on('data', (data) => {
                 console.log(`FFmpeg [scheduled ${streamKey}]: ${data}`);
             });
             
-            ffmpeg.on('close', (code) => {
+            ffmpeg.on('close', async (code) => {
                 this.activeStreams.delete(streamKey);
-                this.updateStreamStatus(videoId, platform.id, 
+                
+                if (loopConfigId) {
+                    await this.loopManager.endLoopSession(streamId);
+                }
+                
+                await this.updateStreamStatus(videoId, platform.id, 
                     code === 0 ? 'completed' : 'error');
                 
-                // Emitir evento cuando el stream termine
                 this.emit('stream:scheduled:ended', {
                     videoId,
                     platformId: platform.id,
@@ -276,28 +298,27 @@ class StreamScheduler extends EventEmitter {
         }
     }
 
-    // Crear nueva programación
     async createSchedule(data) {
-        const { videoId, platformIds, scheduleDays, scheduleTime } = data;
+        const { videoId, platformIds, scheduleDays, scheduleTime, loopConfig } = data;
         
         return new Promise((resolve, reject) => {
             const query = `
                 INSERT INTO scheduled_streams 
-                (video_id, platform_ids, schedule_days, schedule_time) 
-                VALUES (?, ?, ?, ?)
+                (video_id, platform_ids, schedule_days, schedule_time, loop_config) 
+                VALUES (?, ?, ?, ?, ?)
             `;
             
             this.db.run(query, [
                 videoId,
                 JSON.stringify(platformIds),
                 JSON.stringify(scheduleDays),
-                scheduleTime
+                scheduleTime,
+                loopConfig ? JSON.stringify(loopConfig) : null
             ], function(err) {
                 if (err) return reject(err);
                 
                 const scheduleId = this.lastID;
                 
-                // Calcular próxima ejecución
                 this.updateNextRun(scheduleId);
                 
                 resolve({ id: scheduleId });
@@ -305,7 +326,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Actualizar próxima ejecución
     async updateNextRun(scheduleId) {
         const schedule = await this.getSchedule(scheduleId);
         if (!schedule) return;
@@ -316,7 +336,6 @@ class StreamScheduler extends EventEmitter {
         const now = new Date();
         let nextRun = new Date();
         
-        // Encontrar el próximo día programado
         for (let i = 0; i <= 7; i++) {
             const checkDate = new Date(now);
             checkDate.setDate(checkDate.getDate() + i);
@@ -328,14 +347,12 @@ class StreamScheduler extends EventEmitter {
             }
         }
         
-        // Actualizar en base de datos
         this.db.run(
             'UPDATE scheduled_streams SET next_run = ? WHERE id = ?',
             [nextRun.toISOString(), scheduleId]
         );
     }
 
-    // Actualizar última ejecución
     async updateLastRun(scheduleId) {
         const now = new Date().toISOString();
         
@@ -352,7 +369,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Registrar acción en logs
     async logAction(scheduleId, action, details) {
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -366,7 +382,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Obtener información del video
     async getVideo(videoId) {
         return new Promise((resolve, reject) => {
             this.db.get(
@@ -380,7 +395,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Obtener información de plataformas
     async getPlatforms(platformIds) {
         return new Promise((resolve, reject) => {
             const placeholders = platformIds.map(() => '?').join(',');
@@ -395,7 +409,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Obtener programación por ID
     async getSchedule(scheduleId) {
         return new Promise((resolve, reject) => {
             this.db.get(
@@ -409,21 +422,19 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Guardar registro de stream
-    async saveStreamRecord(videoId, platformId, pid) {
+    async saveStreamRecord(videoId, platformId, pid, loopConfigId = null) {
         return new Promise((resolve, reject) => {
             this.db.run(
-                'INSERT INTO streams (video_id, platform_id, status, process_pid, started_at) VALUES (?, ?, ?, ?, datetime("now"))',
-                [videoId, platformId, 'streaming', pid],
-                (err) => {
+                'INSERT INTO streams (video_id, platform_id, status, process_pid, started_at, loop_config_id) VALUES (?, ?, ?, ?, datetime("now"), ?)',
+                [videoId, platformId, 'streaming', pid, loopConfigId],
+                function(err) {
                     if (err) return reject(err);
-                    resolve();
+                    resolve(this.lastID);
                 }
             );
         });
     }
 
-    // Actualizar estado del stream
     async updateStreamStatus(videoId, platformId, status) {
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -437,7 +448,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Obtener todas las programaciones
     async getAllSchedules() {
         return new Promise((resolve, reject) => {
             this.db.all(`
@@ -452,14 +462,13 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Actualizar programación
     async updateSchedule(scheduleId, data) {
-        const { platformIds, scheduleDays, scheduleTime, isActive } = data;
+        const { platformIds, scheduleDays, scheduleTime, isActive, loopConfig } = data;
         
         return new Promise((resolve, reject) => {
             const query = `
                 UPDATE scheduled_streams 
-                SET platform_ids = ?, schedule_days = ?, schedule_time = ?, is_active = ?
+                SET platform_ids = ?, schedule_days = ?, schedule_time = ?, is_active = ?, loop_config = ?
                 WHERE id = ?
             `;
             
@@ -468,6 +477,7 @@ class StreamScheduler extends EventEmitter {
                 JSON.stringify(scheduleDays),
                 scheduleTime,
                 isActive ? 1 : 0,
+                loopConfig ? JSON.stringify(loopConfig) : null,
                 scheduleId
             ], (err) => {
                 if (err) return reject(err);
@@ -477,7 +487,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Eliminar programación
     async deleteSchedule(scheduleId) {
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -491,7 +500,6 @@ class StreamScheduler extends EventEmitter {
         });
     }
 
-    // Obtener logs de programación
     async getScheduleLogs(scheduleId, limit = 50) {
         return new Promise((resolve, reject) => {
             this.db.all(

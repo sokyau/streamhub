@@ -3,6 +3,7 @@ let platforms = [];
 let videos = [];
 let activeDownloadId = null;
 let ws = null;
+let wsReconnectInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     initializeWebSocket();
@@ -21,6 +22,10 @@ function initializeWebSocket() {
     
     ws.onopen = () => {
         console.log('WebSocket connected');
+        if (wsReconnectInterval) {
+            clearInterval(wsReconnectInterval);
+            wsReconnectInterval = null;
+        }
     };
     
     ws.onmessage = (event) => {
@@ -30,7 +35,13 @@ function initializeWebSocket() {
     
     ws.onclose = () => {
         console.log('WebSocket disconnected, reconnecting...');
-        setTimeout(initializeWebSocket, 3000);
+        if (!wsReconnectInterval) {
+            wsReconnectInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.CLOSED) {
+                    initializeWebSocket();
+                }
+            }, 3000);
+        }
     };
     
     ws.onerror = (error) => {
@@ -58,32 +69,50 @@ function handleWebSocketMessage(message) {
             updateStreamStatus();
             break;
             
+        case 'stream_crashed':
+            handleStreamCrash(data);
+            break;
+            
+        case 'loop_iteration':
+            updateLoopIndicator(data);
+            break;
+            
         default:
-            // Handle other message types
             break;
     }
 }
 
+function handleStreamCrash(data) {
+    showNotification('error', 'Stream Detenido', `El stream se detuvo inesperadamente`);
+    updateStreamStatus();
+}
+
+function updateLoopIndicator(data) {
+    const streamElement = document.querySelector(`[data-stream-key="${data.videoId}-${data.platformId}"]`);
+    if (streamElement) {
+        const indicator = streamElement.querySelector('.loop-iteration');
+        if (indicator) {
+            indicator.textContent = `Iteración ${data.iteration}`;
+        }
+    }
+}
+
 function setupEventListeners() {
-    // Platform form
     document.getElementById('platformForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         await savePlatform();
     });
     
-    // Schedule form
     document.getElementById('scheduleForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         await saveSchedule();
     });
     
-    // Dropbox API form
     document.getElementById('dropboxAPIForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         await saveDropboxAPI();
     });
     
-    // Day selector
     document.querySelectorAll('.day-checkbox').forEach(label => {
         const checkbox = label.querySelector('input');
         label.onclick = () => {
@@ -93,7 +122,6 @@ function setupEventListeners() {
     });
 }
 
-// Dropbox functions
 async function startDropboxDownload() {
     const url = document.getElementById('dropboxUrl').value.trim();
     
@@ -127,7 +155,6 @@ async function startDropboxDownload() {
         closeModal('dropboxModal');
         showModal('downloadProgressModal');
         
-        // Show downloads section
         document.getElementById('downloadsSection').style.display = 'block';
         
     } catch (error) {
@@ -158,7 +185,6 @@ function handleDownloadComplete(data) {
         loadVideos();
         activeDownloadId = null;
         
-        // Hide downloads section if no active downloads
         checkActiveDownloads();
     }
 }
@@ -191,8 +217,6 @@ async function cancelDownload() {
 }
 
 async function checkActiveDownloads() {
-    // This would check for any active downloads and update UI accordingly
-    // For now, just hide the section if no active download
     if (!activeDownloadId) {
         document.getElementById('downloadsSection').style.display = 'none';
     }
@@ -259,7 +283,6 @@ async function saveDropboxAPI() {
     }
 }
 
-// Video management
 async function loadVideos() {
     try {
         const response = await fetch('/api/videos');
@@ -306,7 +329,7 @@ function renderVideos() {
                     <button class="btn btn-primary btn-sm" onclick="showStreamModal(${video.id}, '${escapeHtml(video.original_name)}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                             <path d="M8 5V19L19 12L8 5Z" fill="currentColor"/>
-</svg>
+                        </svg>
                         Transmitir
                     </button>
                     <button class="btn btn-danger btn-sm" onclick="deleteVideo(${video.id})">
@@ -339,7 +362,6 @@ async function deleteVideo(videoId) {
     }
 }
 
-// Platform management
 async function loadPlatforms() {
     try {
         const response = await fetch('/api/platforms');
@@ -402,7 +424,6 @@ function updatePlatformHelp() {
     rtmpHelp.textContent = helps[type];
 }
 
-// Streaming functions
 function showStreamModal(videoId, videoName) {
     currentVideoId = videoId;
     document.getElementById('streamVideoName').textContent = videoName;
@@ -440,6 +461,8 @@ async function startStreaming() {
         return;
     }
     
+    const loopConfig = loopUI.getLoopConfig();
+    
     try {
         const response = await fetch('/api/stream/start', {
             method: 'POST',
@@ -448,14 +471,16 @@ async function startStreaming() {
             },
             body: JSON.stringify({
                 videoId: currentVideoId,
-                platformIds: selectedPlatforms
+                platformIds: selectedPlatforms,
+                loopConfig: loopConfig ? { ...loopConfig, enabled: true } : null
             })
         });
         
         if (response.ok) {
             closeModal('streamModal');
             updateStreamStatus();
-            showNotification('success', 'Transmisión Iniciada', 'La transmisión ha comenzado');
+            showNotification('success', 'Transmisión Iniciada', 
+                loopConfig ? 'La transmisión ha comenzado en bucle' : 'La transmisión ha comenzado');
         } else {
             showNotification('error', 'Error', 'No se pudo iniciar la transmisión');
         }
@@ -485,12 +510,20 @@ async function updateStreamStatus() {
             const platform = platforms.find(p => p.id == stream.platformId);
             
             return `
-                <div class="stream-item">
+                <div class="stream-item" data-stream-key="${stream.key}">
                     <div class="stream-info">
                         <div class="stream-status"></div>
                         <div class="stream-details">
                             <h4>${video ? escapeHtml(video.original_name) : 'Video'}</h4>
                             <p>Transmitiendo en ${platform ? escapeHtml(platform.name) : 'Plataforma'}</p>
+                            ${stream.loopActive ? `
+                                <div class="loop-indicator active">
+                                    <svg class="loop-icon spinning" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                        <path d="M4 12C4 7.58172 7.58172 4 12 4C14.4817 4 16.7245 5.08421 18.2929 6.79289L16 9H22V3L19.6569 5.34315C17.7353 3.12169 14.9947 2 12 2C6.47715 2 2 6.47715 2 12H4ZM20 12C20 16.4183 16.4183 20 12 20C9.51828 20 7.27547 18.9158 5.70711 17.2071L8 15H2V21L4.34315 18.6569C6.26472 20.8783 9.00531 22 12 22C17.5228 22 22 17.5228 22 12H20Z" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                    <span class="loop-iteration">En bucle</span>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                     <button class="btn btn-danger btn-sm" onclick="stopStream(${stream.videoId}, ${stream.platformId})">
@@ -523,7 +556,6 @@ async function stopStream(videoId, platformId) {
     }
 }
 
-// Modal functions
 function showModal(modalId) {
     document.getElementById(modalId).classList.add('active');
 }
@@ -551,7 +583,6 @@ function showDropboxAPIConfig() {
     showSettingsModal();
 }
 
-// Tab switching
 function switchTab(tabName) {
     document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.remove('active');
@@ -568,7 +599,6 @@ function switchTab(tabName) {
     }
 }
 
-// Notifications
 function showNotification(type, title, message) {
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
@@ -587,7 +617,6 @@ function showNotification(type, title, message) {
     }, 5000);
 }
 
-// Utility functions
 function escapeHtml(text) {
     const map = {
         '&': '&amp;',
@@ -617,3 +646,166 @@ function formatDate(dateString) {
         minute: '2-digit'
     });
 }
+
+async function showScheduleModal() {
+    const videosResponse = await fetch('/api/videos');
+    const videos = await videosResponse.json();
+    
+    const videoSelect = document.getElementById('scheduleVideo');
+    videoSelect.innerHTML = '<option value="">-- Selecciona un video --</option>' +
+        videos.map(v => `<option value="${v.id}">${escapeHtml(v.original_name)}</option>`).join('');
+    
+    const platformsResponse = await fetch('/api/platforms');
+    const platforms = await platformsResponse.json();
+    
+    const platformsList = document.getElementById('schedulePlatformsList');
+    platformsList.innerHTML = platforms.map(p => `
+        <label class="platform-option">
+            <input type="checkbox" value="${p.id}" name="schedulePlatform">
+            <div class="platform-label">
+                <strong>${escapeHtml(p.name)}</strong>
+                <span class="platform-type">${p.type}</span>
+            </div>
+        </label>
+    `).join('');
+    
+    document.querySelectorAll('.day-checkbox').forEach(label =>
+
+label.classList.remove('selected'));
+    
+    showModal('scheduleModal');
+}
+
+async function saveSchedule() {
+    const selectedDays = Array.from(document.querySelectorAll('.day-checkbox input:checked'))
+        .map(cb => parseInt(cb.value));
+    
+    const selectedPlatforms = Array.from(document.querySelectorAll('input[name="schedulePlatform"]:checked'))
+        .map(cb => parseInt(cb.value));
+    
+    const scheduleData = {
+        videoId: parseInt(document.getElementById('scheduleVideo').value),
+        platformIds: selectedPlatforms,
+        scheduleDays: selectedDays,
+        scheduleTime: document.getElementById('scheduleTime').value
+    };
+    
+    if (!scheduleData.videoId || selectedPlatforms.length === 0 || selectedDays.length === 0 || !scheduleData.scheduleTime) {
+        showNotification('warning', 'Atención', 'Por favor completa todos los campos');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/scheduled-streams', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(scheduleData)
+        });
+        
+        if (response.ok) {
+            closeModal('scheduleModal');
+            loadScheduledStreams();
+            showNotification('success', 'Programación Guardada', 'La transmisión se programó correctamente');
+        } else {
+            const error = await response.json();
+            showNotification('error', 'Error', error.error || 'No se pudo programar la transmisión');
+        }
+    } catch (error) {
+        showNotification('error', 'Error', 'Error al programar la transmisión');
+    }
+}
+
+async function loadScheduledStreams() {
+    try {
+        const response = await fetch('/api/scheduled-streams');
+        const schedules = await response.json();
+        
+        const container = document.getElementById('schedulesList');
+        
+        if (schedules.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M8 7V3M16 7V3M7 11H17M5 21H19C20.1046 21 21 20.1046 21 19V7C21 5.89543 20.1046 5 19 5H5C3.89543 5 3 5.89543 3 7V19C3 20.1046 3.89543 21 5 21Z" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <p>No hay transmisiones programadas</p>
+                </div>
+            `;
+            return;
+        }
+        
+        const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        
+        container.innerHTML = schedules.map(schedule => `
+            <div class="schedule-item ${schedule.is_active ? '' : 'inactive'}">
+                <div class="schedule-info">
+                    <h4>${escapeHtml(schedule.video_name)}</h4>
+                    <div class="schedule-details">
+                        <p>Plataformas: ${schedule.platforms.map(p => escapeHtml(p.name)).join(', ')}</p>
+                        <p>Días: ${schedule.schedule_days.map(d => dayNames[d]).join(', ')}</p>
+                        <p>Hora: ${schedule.schedule_time}</p>
+                    </div>
+                </div>
+                <div class="schedule-actions">
+                    <button class="btn btn-sm ${schedule.is_active ? 'btn-secondary' : 'btn-primary'}" 
+                            onclick="toggleSchedule(${schedule.id}, ${!schedule.is_active})">
+                        ${schedule.is_active ? 'Desactivar' : 'Activar'}
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSchedule(${schedule.id})">
+                        Eliminar
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading scheduled streams:', error);
+    }
+}
+
+async function toggleSchedule(scheduleId, activate) {
+    try {
+        const response = await fetch(`/api/scheduled-streams/${scheduleId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ isActive: activate })
+        });
+        
+        if (response.ok) {
+            loadScheduledStreams();
+            showNotification('success', 'Actualizado', `Programación ${activate ? 'activada' : 'desactivada'}`);
+        }
+    } catch (error) {
+        showNotification('error', 'Error', 'No se pudo actualizar la programación');
+    }
+}
+
+async function deleteSchedule(scheduleId) {
+    if (!confirm('¿Estás seguro de eliminar esta programación?')) return;
+    
+    try {
+        const response = await fetch(`/api/scheduled-streams/${scheduleId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            loadScheduledStreams();
+            showNotification('success', 'Eliminado', 'La programación se eliminó correctamente');
+        }
+    } catch (error) {
+        showNotification('error', 'Error', 'No se pudo eliminar la programación');
+    }
+}
+
+window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+});
+
+window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+});
